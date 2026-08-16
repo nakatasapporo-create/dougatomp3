@@ -1,557 +1,430 @@
-<!DOCTYPE html>
+
+<!doctype html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>iPad動画から音声抽出・MP3変換ツール</title>
-  <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Font Awesome Icons -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <!-- lamejs (MP3 encoder in JavaScript) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.all.min.js"></script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f172a">
+  <title>動画をMP3に変換</title>
+  <script
+    src="https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js"
+    integrity="sha512-xT0S/xXvkrfkRXGBPlzZPCAncnMK5c1N7slRkToUbv8Z901aUEuKO84tLy8dWU+3ew4InFEN7TebPaVMy2npZw=="
+    crossorigin="anonymous"
+    referrerpolicy="no-referrer"></script>
   <style>
-    /* iOS特有のスクロール挙動とタップハイライトを最適化 */
+    :root {
+      color-scheme: light;
+      --ink: #172033;
+      --muted: #64748b;
+      --surface: #ffffff;
+      --page: #f4f7fb;
+      --accent: #2563eb;
+      --accent-dark: #1d4ed8;
+      --line: #dce4ef;
+      --good: #047857;
+      --bad: #b91c1c;
+      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
     body {
+      margin: 0;
+      min-height: 100dvh;
+      display: grid;
+      place-items: center;
+      padding: 24px 16px calc(24px + env(safe-area-inset-bottom));
+      background: radial-gradient(circle at 10% 0%, #e0ebff 0, transparent 34rem), var(--page);
+      color: var(--ink);
+    }
+
+    main {
+      width: min(100%, 620px);
+      padding: clamp(24px, 6vw, 42px);
+      border: 1px solid rgba(220, 228, 239, .9);
+      border-radius: 24px;
+      background: rgba(255, 255, 255, .96);
+      box-shadow: 0 22px 60px rgba(15, 23, 42, .12);
+    }
+
+    h1 { margin: 0; font-size: clamp(1.5rem, 6vw, 2.05rem); letter-spacing: -.03em; }
+    .lead { margin: 10px 0 26px; color: var(--muted); line-height: 1.65; }
+
+    .picker {
+      display: block;
+      padding: 26px 16px;
+      border: 2px dashed #b6c7df;
+      border-radius: 18px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .15s, background .15s, transform .15s;
       -webkit-tap-highlight-color: transparent;
     }
-    .custom-gradient {
-      background: linear-gradient(135deg, #1e1b4b 0%, #311042 50%, #0f172a 100%);
+
+    .picker:hover, .picker:focus-within, .picker.dragover {
+      border-color: var(--accent);
+      background: #f3f7ff;
     }
+
+    .picker:active { transform: scale(.99); }
+    .picker input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    .picker strong { display: block; font-size: 1rem; }
+    .picker span { display: block; margin-top: 7px; color: var(--muted); font-size: .9rem; }
+
+    .file {
+      min-height: 1.5em;
+      margin: 14px 2px 0;
+      color: var(--muted);
+      font-size: .9rem;
+      overflow-wrap: anywhere;
+    }
+
+    .actions { display: grid; gap: 10px; margin-top: 24px; }
+    button {
+      appearance: none;
+      min-height: 50px;
+      border: 0;
+      border-radius: 13px;
+      padding: 12px 16px;
+      background: var(--accent);
+      color: white;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 6px 15px rgba(37, 99, 235, .22);
+      transition: background .15s, transform .15s, opacity .15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    button:hover:not(:disabled) { background: var(--accent-dark); }
+    button:active:not(:disabled) { transform: translateY(1px); }
+    button.secondary { background: #e8eef8; color: #1e3a5f; box-shadow: none; }
+    button.secondary:hover:not(:disabled) { background: #dce7f6; }
+    button:disabled { opacity: .48; cursor: not-allowed; }
+
+    .progress-wrap { margin-top: 24px; }
+    progress { width: 100%; height: 10px; overflow: hidden; border: 0; border-radius: 999px; }
+    progress::-webkit-progress-bar { background: #e8eef7; border-radius: inherit; }
+    progress::-webkit-progress-value { background: var(--accent); border-radius: inherit; }
+    progress::-moz-progress-bar { background: var(--accent); border-radius: inherit; }
+
+    .status { min-height: 1.5em; margin: 11px 2px 0; color: var(--muted); font-size: .92rem; line-height: 1.5; }
+    .status[data-kind="success"] { color: var(--good); }
+    .status[data-kind="error"] { color: var(--bad); }
+    .note { margin: 22px 0 0; color: var(--muted); font-size: .78rem; line-height: 1.65; }
+    .hidden { display: none !important; }
   </style>
 </head>
-<body class="custom-gradient text-slate-100 min-h-screen flex flex-col font-sans">
+<body>
+  <main>
+    <h1>動画をMP3に変換</h1>
+    <p class="lead">動画を選ぶと、この端末内で音声をMP3に変換します。iPhoneでは、変換中はこの画面を開いたままにしてください。</p>
 
-  <!-- ヘッダー -->
-  <header class="border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
-    <div class="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
-      <div class="flex items-center space-x-3">
-        <div class="bg-indigo-600 p-2 rounded-xl text-white shadow-md shadow-indigo-500/20">
-          <i class="fa-solid fa-file-audio text-xl"></i>
-        </div>
-        <div>
-          <h1 class="text-lg font-bold tracking-tight">iPad Video to MP3</h1>
-          <p class="text-xs text-slate-400">画面収録動画から音声のみを抽出・変換</p>
-        </div>
-      </div>
-      <div class="text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-3 py-1 rounded-full flex items-center gap-1.5 font-medium">
-        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-        オフライン（ローカル）処理
-      </div>
-    </div>
-  </header>
+    <label class="picker" id="picker">
+      <input id="fileInput" type="file" accept="video/*,audio/*">
+      <strong>動画または音声ファイルを選択</strong>
+      <span>タップしてファイルを選択</span>
+    </label>
+    <p class="file" id="fileName" aria-live="polite">ファイルはまだ選択されていません。</p>
 
-  <!-- メインコンテンツ -->
-  <main class="flex-grow max-w-3xl w-full mx-auto px-4 py-8 flex flex-col justify-center">
-    
-    <!-- 説明カード -->
-    <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 mb-6 shadow-xl backdrop-blur-sm">
-      <h2 class="text-lg font-semibold text-indigo-400 mb-3 flex items-center gap-2">
-        <i class="fa-solid fa-circle-info"></i> このアプリについて
-      </h2>
-      <p class="text-sm text-slate-300 leading-relaxed">
-        iPadやiPhoneで画面収録した動画ファイル（.mp4, .movなど）を読み込み、内部の音声データを取り出して高音質な <strong>MP3形式</strong> に変換します。<br>
-        動画データはサーバーに送信されず、<strong>すべてお使いのデバイス上で安全に処理されます</strong>（通信量も発生しません）。
-      </p>
+    <div class="actions">
+      <button id="convertButton" type="button" disabled>MP3に変換</button>
+      <button id="saveButton" class="secondary hidden" type="button">MP3を保存・共有</button>
     </div>
 
-    <!-- コンバーター本体 -->
-    <div class="bg-slate-900/80 border border-slate-700/50 rounded-3xl p-6 md:p-8 shadow-2xl relative overflow-hidden">
-      <!-- 背景装飾 -->
-      <div class="absolute -top-24 -right-24 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
-      <div class="absolute -bottom-24 -left-24 w-48 h-48 bg-purple-500/10 rounded-full blur-3xl pointer-events-none"></div>
-
-      <!-- ファイル選択・ドラッグエリア -->
-      <div id="drop-zone" class="border-2 border-dashed border-slate-700 hover:border-indigo-500 rounded-2xl p-8 text-center cursor-pointer transition-all duration-300 bg-slate-950/40 relative group">
-        <input type="file" id="video-input" accept="video/*" class="hidden">
-        <div class="space-y-4">
-          <div class="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mx-auto group-hover:scale-110 transition-transform duration-300 group-hover:bg-indigo-600/20">
-            <i class="fa-solid fa-cloud-arrow-up text-2xl text-slate-400 group-hover:text-indigo-400 transition-colors"></i>
-          </div>
-          <div>
-            <span class="text-base font-semibold block text-slate-200">
-              iPadの動画ファイルを選択
-            </span>
-            <span class="text-xs text-slate-400 mt-1 block">
-              タップして写真ライブラリやファイルから動画を選択（またはドラッグ＆ドロップ）
-            </span>
-          </div>
-          <div class="inline-flex gap-2 justify-center">
-            <span class="text-xs bg-slate-800 text-slate-400 px-2.5 py-1 rounded border border-slate-700">MP4</span>
-            <span class="text-xs bg-slate-800 text-slate-400 px-2.5 py-1 rounded border border-slate-700">MOV</span>
-            <span class="text-xs bg-slate-800 text-slate-400 px-2.5 py-1 rounded border border-slate-700">M4V</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- 選択されたファイル情報 (初期状態は非表示) -->
-      <div id="file-info-container" class="hidden mt-6 bg-slate-950/60 border border-slate-800 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-4">
-        <div class="flex items-center space-x-3 w-full md:w-auto">
-          <div class="bg-indigo-950 text-indigo-400 p-2.5 rounded-lg border border-indigo-900">
-            <i class="fa-solid fa-file-video text-xl"></i>
-          </div>
-          <div class="overflow-hidden w-full max-w-[280px] md:max-w-[400px]">
-            <p id="file-name" class="font-medium text-sm text-slate-200 truncate">video_name.mp4</p>
-            <p id="file-size" class="text-xs text-slate-400 mt-0.5">0.0 MB</p>
-          </div>
-        </div>
-        <!-- プレビュー再生用 (動画読み込み後に表示) -->
-        <video id="video-preview" class="hidden" controls style="max-height: 100px; max-width: 100%;"></video>
-        <button id="reset-btn" class="text-xs text-slate-400 hover:text-rose-400 transition-colors py-2 px-3 hover:bg-rose-500/10 rounded-lg flex items-center gap-1">
-          <i class="fa-solid fa-trash-can"></i> キャンセル
-        </button>
-      </div>
-
-      <!-- 音質（ビットレート）設定 (初期状態は非表示) -->
-      <div id="settings-container" class="hidden mt-6 border-t border-slate-800 pt-6">
-        <label class="block text-sm font-medium text-slate-300 mb-2">変換ビットレート（音質）:</label>
-        <div class="grid grid-cols-3 gap-3">
-          <label class="relative flex flex-col p-3 border border-slate-800 rounded-xl cursor-pointer bg-slate-950/20 hover:bg-slate-950/50 transition-colors">
-            <input type="radio" name="bitrate" value="128" checked class="absolute right-3 top-3 accent-indigo-500">
-            <span class="font-semibold text-sm text-slate-200">128 kbps</span>
-            <span class="text-[10px] text-slate-400 mt-1">標準 (ファイル軽量)</span>
-          </label>
-          <label class="relative flex flex-col p-3 border border-slate-800 rounded-xl cursor-pointer bg-slate-950/20 hover:bg-slate-950/50 transition-colors">
-            <input type="radio" name="bitrate" value="192" class="absolute right-3 top-3 accent-indigo-500">
-            <span class="font-semibold text-sm text-slate-200">192 kbps</span>
-            <span class="text-[10px] text-slate-400 mt-1">高音質 (おすすめ)</span>
-          </label>
-          <label class="relative flex flex-col p-3 border border-slate-800 rounded-xl cursor-pointer bg-slate-950/20 hover:bg-slate-950/50 transition-colors">
-            <input type="radio" name="bitrate" value="320" class="absolute right-3 top-3 accent-indigo-500">
-            <span class="font-semibold text-sm text-slate-200">320 kbps</span>
-            <span class="text-[10px] text-slate-400 mt-1">最高音質</span>
-          </label>
-        </div>
-      </div>
-
-      <!-- 処理中ステータス/プログレスバー (初期状態は非表示) -->
-      <div id="progress-container" class="hidden mt-6 bg-slate-950/40 border border-slate-800 rounded-2xl p-5 space-y-4">
-        <div class="flex items-center justify-between text-sm">
-          <span id="progress-status" class="text-indigo-400 font-medium flex items-center gap-2">
-            <i class="fa-solid fa-spinner animate-spin"></i>
-            動画を解析中...
-          </span>
-          <span id="progress-percent" class="font-bold text-slate-300">0%</span>
-        </div>
-        <div class="w-full bg-slate-800 rounded-full h-2.5 overflow-hidden">
-          <div id="progress-bar" class="bg-indigo-500 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
-        </div>
-        <p id="progress-hint" class="text-xs text-slate-400 italic text-center">
-          ※長い動画の場合、少し時間がかかることがあります。アプリを閉じずにお待ちください。
-        </p>
-      </div>
-
-      <!-- 完了・ダウンロードエリア (初期状態は非表示) -->
-      <div id="complete-container" class="hidden mt-6 bg-emerald-950/20 border border-emerald-900/40 rounded-2xl p-5 text-center space-y-4">
-        <div class="inline-flex items-center justify-center w-12 h-12 bg-emerald-500/20 text-emerald-400 rounded-full text-xl mb-1">
-          <i class="fa-solid fa-circle-check"></i>
-        </div>
-        <div>
-          <h3 class="text-base font-bold text-slate-100">MP3変換が完了しました！</h3>
-          <p class="text-xs text-slate-400 mt-1">iPadのファイルまたはフォルダに直接保存できます。</p>
-        </div>
-        <div class="flex flex-col sm:flex-row gap-3 justify-center pt-2">
-          <button id="download-btn" class="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-3 px-6 rounded-xl shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 transition-transform active:scale-95">
-            <i class="fa-solid fa-download text-lg"></i> MP3を保存する
-          </button>
-          <button id="play-converted-btn" class="w-full sm:w-auto bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold py-3 px-6 rounded-xl border border-slate-700 flex items-center justify-center gap-2 transition-all">
-            <i class="fa-solid fa-play"></i> 音声をプレビュー再生
-          </button>
-        </div>
-        <audio id="converted-audio-preview" class="hidden w-full max-w-md mx-auto mt-4" controls></audio>
-      </div>
-
-      <!-- アクションボタン -->
-      <div id="action-container" class="hidden mt-6">
-        <button id="convert-btn" class="w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-bold py-4 px-6 rounded-2xl shadow-xl shadow-indigo-500/10 flex items-center justify-center gap-2.5 transition-all active:scale-95 text-base">
-          <i class="fa-solid fa-bolt text-lg"></i> MP3への変換を開始
-        </button>
-      </div>
-
+    <div class="progress-wrap" id="progressWrap" hidden>
+      <progress id="progress" max="100" value="0">0%</progress>
+      <p class="status" id="status" aria-live="polite"></p>
     </div>
 
-    <!-- ヘルプ・注意点 -->
-    <div class="mt-8 space-y-4">
-      <h3 class="text-sm font-bold text-slate-400 tracking-wider uppercase">iPadでのヒント</h3>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div class="bg-slate-900/30 border border-slate-800/60 p-4 rounded-xl flex items-start gap-3">
-          <div class="text-indigo-400 mt-0.5"><i class="fa-solid fa-video"></i></div>
-          <div>
-            <h4 class="text-xs font-semibold text-slate-200">画面収録ファイルの場所</h4>
-            <p class="text-[11px] text-slate-400 mt-1 leading-relaxed">
-              iPadで収録した動画は通常「写真」アプリに保存されます。ファイル選択時に「写真ライブラリ」を選択してください。
-            </p>
-          </div>
-        </div>
-        <div class="bg-slate-900/30 border border-slate-800/60 p-4 rounded-xl flex items-start gap-3">
-          <div class="text-indigo-400 mt-0.5"><i class="fa-solid fa-folder-open"></i></div>
-          <div>
-            <h4 class="text-xs font-semibold text-slate-200">保存先の選択</h4>
-            <p class="text-[11px] text-slate-400 mt-1 leading-relaxed">
-              「保存する」をタップすると、Safariなどのダウンロード確認が出ます。保存後はiPadの「ファイル」アプリの「ダウンロード」フォルダ等から再生できます。
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
-
+    <p class="note">変換にはインターネット接続が必要です（MP3エンコーダーの読み込み用）。ファイル自体はサーバーへアップロードされません。iPhoneで再生できない形式の動画は変換できません。</p>
   </main>
 
-  <!-- フッター -->
-  <footer class="border-t border-slate-800 bg-slate-950/80 py-6 text-center text-xs text-slate-500">
-    <p>© 2026 iPad動画からMP3抽出ツール. Web Audio API / lamejs 完全ローカル変換</p>
-  </footer>
-
-  <!-- エラーメッセージ用カスタムトースト (通知) -->
-  <div id="toast" class="fixed bottom-6 right-6 max-w-sm w-full bg-rose-950/90 border border-rose-800/80 text-rose-200 px-4 py-3 rounded-xl shadow-2xl backdrop-blur-md flex items-center gap-3 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none z-50">
-    <div class="bg-rose-900/50 p-1.5 rounded-lg text-rose-400">
-      <i class="fa-solid fa-triangle-exclamation"></i>
-    </div>
-    <div class="flex-grow text-xs font-medium" id="toast-message">
-      エラーが発生しました。
-    </div>
-    <button onclick="hideToast()" class="text-rose-400 hover:text-rose-200"><i class="fa-solid fa-xmark"></i></button>
-  </div>
-
   <script>
-    // --- グローバル変数 & DOM要素 ---
-    let selectedFile = null;
-    let convertedBlobUrl = null;
-    let convertedBlob = null;
-    let audioBufferCache = null;
+    (() => {
+      'use strict';
 
-    const dropZone = document.getElementById('drop-zone');
-    const videoInput = document.getElementById('video-input');
-    const fileInfoContainer = document.getElementById('file-info-container');
-    const fileNameElement = document.getElementById('file-name');
-    const fileSizeElement = document.getElementById('file-size');
-    const settingsContainer = document.getElementById('settings-container');
-    const actionContainer = document.getElementById('action-container');
-    const progressContainer = document.getElementById('progress-container');
-    const progressStatus = document.getElementById('progress-status');
-    const progressPercent = document.getElementById('progress-percent');
-    const progressBar = document.getElementById('progress-bar');
-    const completeContainer = document.getElementById('complete-container');
-    const resetBtn = document.getElementById('reset-btn');
-    const convertBtn = document.getElementById('convert-btn');
-    const downloadBtn = document.getElementById('download-btn');
-    const playConvertedBtn = document.getElementById('play-converted-btn');
-    const convertedAudioPreview = document.getElementById('converted-audio-preview');
-    const toast = document.getElementById('toast');
-    const toastMessage = document.getElementById('toast-message');
+      const $ = (id) => document.getElementById(id);
+      const fileInput = $('fileInput');
+      const picker = $('picker');
+      const fileName = $('fileName');
+      const convertButton = $('convertButton');
+      const saveButton = $('saveButton');
+      const progressWrap = $('progressWrap');
+      const progress = $('progress');
+      const status = $('status');
 
-    // --- トースト通知機能 ---
-    function showToast(message) {
-      toastMessage.textContent = message;
-      toast.classList.remove('translate-y-20', 'opacity-0', 'pointer-events-none');
-      toast.classList.add('translate-y-0', 'opacity-100');
-      setTimeout(hideToast, 5000);
-    }
+      let selectedFile = null;
+      let convertedFile = null;
+      let convertedUrl = null;
+      let isConverting = false;
+      let cancelCurrentConversion = null;
 
-    function hideToast() {
-      toast.classList.remove('translate-y-0', 'opacity-100');
-      toast.classList.add('translate-y-20', 'opacity-0', 'pointer-events-none');
-    }
-
-    // --- ファイル選択・ドラッグイベントの設定 ---
-    dropZone.addEventListener('click', () => videoInput.click());
-
-    // ドラッグ＆ドロップのビジュアル効果
-    ['dragenter', 'dragover'].forEach(eventName => {
-      dropZone.addEventListener(eventName, (e) => {
-        e.preventDefault();
-        dropZone.classList.add('border-indigo-500', 'bg-indigo-950/10');
-      }, false);
-    });
-
-    ['dragleave', 'drop'].forEach(eventName => {
-      dropZone.addEventListener(eventName, (e) => {
-        e.preventDefault();
-        dropZone.classList.remove('border-indigo-500', 'bg-indigo-950/10');
-      }, false);
-    });
-
-    dropZone.addEventListener('drop', (e) => {
-      const dt = e.dataTransfer;
-      const files = dt.files;
-      if (files.length > 0) {
-        handleFileSelect(files[0]);
-      }
-    });
-
-    videoInput.addEventListener('change', (e) => {
-      if (e.target.files.length > 0) {
-        handleFileSelect(e.target.files[0]);
-      }
-    });
-
-    // --- 選択された動画のバリデーションと処理 ---
-    function handleFileSelect(file) {
-      if (!file.type.startsWith('video/')) {
-        showToast('選択されたファイルは動画ではない可能性があります。動画ファイルを選択してください。');
-        return;
+      function setStatus(message, kind = '') {
+        status.textContent = message;
+        status.dataset.kind = kind;
       }
 
-      selectedFile = file;
-      audioBufferCache = null; // キャッシュクリア
-
-      // UIを更新
-      fileNameElement.textContent = file.name;
-      fileSizeElement.textContent = (file.size / (1024 * 1024)).toFixed(2) + ' MB';
-
-      // 表示切り替え
-      dropZone.classList.add('hidden');
-      fileInfoContainer.classList.remove('hidden');
-      settingsContainer.classList.remove('hidden');
-      actionContainer.classList.remove('hidden');
-      
-      // 前回の変換結果をリセット
-      resetConversionState();
-    }
-
-    // 状態クリア
-    function resetConversionState() {
-      completeContainer.classList.add('hidden');
-      progressContainer.classList.add('hidden');
-      if (convertedBlobUrl) {
-        URL.revokeObjectURL(convertedBlobUrl);
-        convertedBlobUrl = null;
-        convertedBlob = null;
+      function setProgress(value) {
+        progress.value = Math.max(0, Math.min(100, value));
       }
-      convertedAudioPreview.src = '';
-      convertedAudioPreview.classList.add('hidden');
-      playConvertedBtn.innerHTML = '<i class="fa-solid fa-play"></i> 音声をプレビュー再生';
-    }
 
-    // 完全なリセット（最初の状態に戻る）
-    resetBtn.addEventListener('click', () => {
-      selectedFile = null;
-      audioBufferCache = null;
-      videoInput.value = '';
-      
-      dropZone.classList.remove('hidden');
-      fileInfoContainer.classList.add('hidden');
-      settingsContainer.classList.add('hidden');
-      actionContainer.classList.add('hidden');
-      
-      resetConversionState();
-    });
-
-    // --- MP3変換ロジック ---
-    convertBtn.addEventListener('click', async () => {
-      if (!selectedFile) return;
-
-      // 画面操作・状態の切り替え
-      actionContainer.classList.add('hidden');
-      settingsContainer.classList.add('hidden');
-      progressContainer.classList.remove('hidden');
-      updateProgress('動画からオーディオデータを抽出中...', 5);
-
-      try {
-        // iPad対応: ユーザーインタラクション内でAudioContextを生成
-        const AudioContext = window.AudioContext || window.webkitAudioContext;
-        const audioCtx = new AudioContext();
-
-        let audioBuffer;
-
-        // すでにデコード済みの場合はキャッシュを利用
-        if (audioBufferCache) {
-          audioBuffer = audioBufferCache;
-        } else {
-          // 動画をArrayBufferに読み込み
-          const fileReader = new FileReader();
-          
-          const arrayBuffer = await new Promise((resolve, reject) => {
-            fileReader.onload = () => resolve(fileReader.result);
-            fileReader.onerror = () => reject(new Error('ファイルの読み込みに失敗しました。'));
-            fileReader.onprogress = (e) => {
-              if (e.lengthComputable) {
-                const percent = Math.round((e.loaded / e.total) * 30); // 30%までをファイル読み込みとする
-                updateProgress('動画ファイルを読み込み中...', 5 + percent);
-              }
-            };
-            fileReader.readAsArrayBuffer(selectedFile);
-          });
-
-          updateProgress('音声をデコード中 (これには数十秒かかる場合があります)...', 40);
-
-          // AudioContextを使ってデコード
-          try {
-            audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-            audioBufferCache = audioBuffer; // キャッシュに格納
-          } catch (decodeErr) {
-            console.error(decodeErr);
-            throw new Error('動画のオーディオトラックのデコードに失敗しました。音声が含まれていない動画、またはiPadで未対応のフォーマットの可能性があります。');
-          }
+      function formatBytes(bytes) {
+        if (!Number.isFinite(bytes)) return '';
+        const units = ['B', 'KB', 'MB', 'GB'];
+        let value = bytes;
+        let unit = 0;
+        while (value >= 1024 && unit < units.length - 1) {
+          value /= 1024;
+          unit += 1;
         }
-
-        updateProgress('MP3ファイルへの書き出し準備中...', 60);
-
-        // ビットレート設定の取得
-        const checkedBitrateInput = document.querySelector('input[name="bitrate"]:checked');
-        const bitrate = checkedBitrateInput ? parseInt(checkedBitrateInput.value, 10) : 128;
-
-        // MP3へのエンコード実行（時間がかかるため非同期的に実行、UIブロッキング防止）
-        await encodeToMp3(audioBuffer, bitrate);
-
-      } catch (err) {
-        console.error(err);
-        showToast(err.message || '変換中にエラーが発生しました。');
-        
-        // エラー時は設定に戻る
-        progressContainer.classList.add('hidden');
-        actionContainer.classList.remove('hidden');
-        settingsContainer.classList.remove('hidden');
+        return `${value >= 10 || unit === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[unit]}`;
       }
-    });
 
-    // 進捗表示の更新
-    function updateProgress(statusText, percentage) {
-      progressStatus.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> ${statusText}`;
-      progressPercent.textContent = `${percentage}%`;
-      progressBar.style.width = `${percentage}%`;
-    }
+      function mp3Name(name) {
+        const base = (name || 'audio').replace(/\.[^/.]+$/, '') || 'audio';
+        return `${base}.mp3`;
+      }
 
-    // --- LameJSを使用したMP3エンコード処理 ---
-    function encodeToMp3(audioBuffer, bitrate) {
-      return new Promise((resolve, reject) => {
-        setTimeout(() => { // UIの更新を確実に行うためのsetTimeout
+      function revokeConvertedUrl() {
+        if (convertedUrl) URL.revokeObjectURL(convertedUrl);
+        convertedUrl = null;
+        convertedFile = null;
+        saveButton.classList.add('hidden');
+      }
+
+      function resetForFile(file) {
+        if (isConverting && cancelCurrentConversion) cancelCurrentConversion();
+        revokeConvertedUrl();
+        selectedFile = file || null;
+        convertButton.disabled = !selectedFile;
+        fileName.textContent = selectedFile
+          ? `${selectedFile.name}（${formatBytes(selectedFile.size)}）`
+          : 'ファイルはまだ選択されていません。';
+        progressWrap.hidden = true;
+        setProgress(0);
+        setStatus('');
+      }
+
+      function eventOnce(target, success, failures = []) {
+        return new Promise((resolve, reject) => {
+          const events = [success, ...failures];
+          const cleanup = () => events.forEach((eventName) => target.removeEventListener(eventName, handler));
+          const handler = (event) => {
+            cleanup();
+            if (event.type === success) resolve(event);
+            else reject(event);
+          };
+          events.forEach((eventName) => target.addEventListener(eventName, handler, { once: true }));
+        });
+      }
+
+      async function waitForMetadata(video) {
+        if (video.readyState >= HTMLMediaElement.HAVE_METADATA && Number.isFinite(video.duration)) return;
+        await eventOnce(video, 'loadedmetadata', ['error', 'abort']);
+        if (!Number.isFinite(video.duration)) throw new Error('動画の長さを取得できませんでした。');
+      }
+
+      function floatTo16BitPCM(samples) {
+        const pcm = new Int16Array(samples.length);
+        for (let i = 0; i < samples.length; i += 1) {
+          const sample = Math.max(-1, Math.min(1, samples[i]));
+          pcm[i] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+        }
+        return pcm;
+      }
+
+      function readableMediaError(video) {
+        const code = video.error && video.error.code;
+        if (code === 4) return 'このiPhone Safariでは再生できない動画形式です。MP4（H.264/AAC）など、iPhoneで再生できる形式を使ってください。';
+        if (code === 3) return '動画の音声をデコードできませんでした。別の動画形式でお試しください。';
+        return '動画を読み込めませんでした。ファイルが壊れていないか確認してください。';
+      }
+
+      function cleanupMedia({ video, source, processor, silentGain, context, objectUrl }) {
+        try { source && source.disconnect(); } catch (_) { /* already disconnected */ }
+        try { processor && processor.disconnect(); } catch (_) { /* already disconnected */ }
+        try { silentGain && silentGain.disconnect(); } catch (_) { /* already disconnected */ }
+        try { video && video.pause(); } catch (_) { /* already paused */ }
+        if (video) {
+          video.removeAttribute('src');
+          try { video.load(); } catch (_) { /* no-op */ }
+          video.remove();
+        }
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+        if (context) {
+          // Close releases the iOS audio session; older Safari versions may only support suspend.
+          Promise.resolve(context.close ? context.close() : context.suspend()).catch(() => {});
+        }
+      }
+
+      async function convertUsingMediaElement(file) {
+        const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextCtor) throw new Error('このブラウザは音声変換に対応していません。');
+        if (!window.lamejs || !window.lamejs.Mp3Encoder) throw new Error('MP3エンコーダーを読み込めませんでした。通信状態を確認して、もう一度お試しください。');
+
+        let context;
+        let video;
+        let source;
+        let processor;
+        let silentGain;
+        let objectUrl;
+        let cancelled = false;
+        let encoder;
+        let mp3Chunks = [];
+        let inputSamples = 0;
+
+        const cancel = () => {
+          cancelled = true;
+          if (video) video.pause();
+        };
+        cancelCurrentConversion = cancel;
+
+        try {
+          objectUrl = URL.createObjectURL(file);
+          video = document.createElement('video');
+          video.preload = 'auto';
+          video.playsInline = true;
+          video.setAttribute('playsinline', '');
+          video.setAttribute('aria-hidden', 'true');
+          video.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:-2px;top:-2px';
+          video.src = objectUrl;
+          document.body.appendChild(video);
+
+          // These calls deliberately happen before the first await. On iPhone Safari, a media
+          // element started after an async metadata wait can lose the button's user activation.
+          // Starting it here lets the native media pipeline load in the background while the
+          // PCM tap is already connected.
+          context = new AudioContextCtor();
+          const resumeContext = context.resume();
+
+          source = context.createMediaElementSource(video);
+          // ScriptProcessor is intentionally used here: it is supported by older iPhone Safari,
+          // unlike AudioWorklet on several iOS versions. Keeping it connected to a zero-gain
+          // destination makes Safari continue to deliver decoded PCM without audible playback.
+          processor = context.createScriptProcessor(4096, 2, 2);
+          silentGain = context.createGain();
+          silentGain.gain.value = 0;
+          source.connect(processor);
+          processor.connect(silentGain);
+          silentGain.connect(context.destination);
+
+          processor.onaudioprocess = (event) => {
+            if (cancelled) return;
+            const input = event.inputBuffer;
+            const channels = input.numberOfChannels > 1 ? 2 : 1;
+            if (!encoder) encoder = new lamejs.Mp3Encoder(channels, context.sampleRate, 128);
+
+            const left = floatTo16BitPCM(input.getChannelData(0));
+            const encoded = channels === 2
+              ? encoder.encodeBuffer(left, floatTo16BitPCM(input.getChannelData(1)))
+              : encoder.encodeBuffer(left);
+            if (encoded.length > 0) mp3Chunks.push(new Uint8Array(encoded));
+
+            inputSamples += input.length;
+            const bySamples = inputSamples / context.sampleRate;
+            const played = Math.max(video.currentTime || 0, bySamples);
+            setProgress(Math.min(99, (played / video.duration) * 100));
+            setStatus(`変換中… ${Math.min(99, Math.round((played / video.duration) * 100))}%`);
+          };
+
+          const playbackEnded = eventOnce(video, 'ended', ['error', 'abort']);
+          video.load();
+          const startPlayback = video.play().then(() => null, (error) => error);
+          setStatus('動画を読み込んでいます…');
           try {
-            const channels = audioBuffer.numberOfChannels;
-            const sampleRate = audioBuffer.sampleRate;
-            
-            // lamejsのエンコーダー初期化 (モノラル or ステレオ)
-            const mp3encoder = new lamejs.Mp3Encoder(channels, sampleRate, bitrate);
-            const mp3Data = [];
-
-            // チャンネルデータの取得
-            const left = audioBuffer.getChannelData(0);
-            const right = channels > 1 ? audioBuffer.getChannelData(1) : null;
-
-            // Float32形式から16bit PCM(Int16)へ変換するヘルパー
-            const convertTo16BitPCM = (float32Array) => {
-              const int16Array = new Int16Array(float32Array.length);
-              for (let i = 0; i < float32Array.length; i++) {
-                let s = Math.max(-1, Math.min(1, float32Array[i]));
-                int16Array[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-              }
-              return int16Array;
-            };
-
-            updateProgress('音声をPCM変換中...', 70);
-            
-            const leftInt16 = convertTo16BitPCM(left);
-            const rightInt16 = right ? convertTo16BitPCM(right) : null;
-
-            // 分割してエンコードを行う（進行状況を更新するため）
-            const sampleBlockSize = 576 * 10; // チャンクサイズ
-            let index = 0;
-            const totalSamples = leftInt16.length;
-
-            function encodeChunk() {
-              if (index < totalSamples) {
-                const chunkLength = Math.min(sampleBlockSize, totalSamples - index);
-                
-                const leftChunk = leftInt16.subarray(index, index + chunkLength);
-                let mp3buf;
-
-                if (channels === 2 && rightInt16) {
-                  const rightChunk = rightInt16.subarray(index, index + chunkLength);
-                  mp3buf = mp3encoder.encodeBuffer(leftChunk, rightChunk);
-                } else {
-                  mp3buf = mp3encoder.encodeBuffer(leftChunk);
-                }
-
-                if (mp3buf.length > 0) {
-                  mp3Data.push(mp3buf);
-                }
-
-                index += chunkLength;
-                
-                // プログレス計算 (70% 〜 95%)
-                const encodeProgress = Math.round(70 + (index / totalSamples) * 25);
-                updateProgress('MP3にエンコード中...', encodeProgress);
-
-                // 次のチャンクをスケジュール（UIスレッドを解放）
-                setTimeout(encodeChunk, 0);
-              } else {
-                // エンコードの終了処理
-                const mp3buf = mp3encoder.flush();
-                if (mp3buf.length > 0) {
-                  mp3Data.push(mp3buf);
-                }
-
-                updateProgress('MP3ファイルを生成中...', 98);
-
-                // Blobの作成
-                convertedBlob = new Blob(mp3Data, { type: 'audio/mp3' });
-                convertedBlobUrl = URL.createObjectURL(convertedBlob);
-
-                // 完了状態に移行
-                onConversionComplete();
-                resolve();
-              }
-            }
-
-            // 最初のチャンクを実行
-            encodeChunk();
-
-          } catch (err) {
-            reject(err);
+            await resumeContext;
+            await waitForMetadata(video);
+            if (cancelled) throw new DOMException('Cancelled', 'AbortError');
+            const playbackError = await startPlayback;
+            if (playbackError) throw playbackError;
+          } catch (error) {
+            if (error && error.type === 'error') throw new Error(readableMediaError(video));
+            throw new Error('iPhoneの音声再生を開始できませんでした。もう一度「MP3に変換」をタップしてください。');
           }
-        }, 50);
-      });
-    }
+          await playbackEnded;
+          if (cancelled) throw new DOMException('Cancelled', 'AbortError');
 
-    // --- 変換完了処理 ---
-    function onConversionComplete() {
-      progressContainer.classList.add('hidden');
-      completeContainer.classList.remove('hidden');
+          // Let the last ScriptProcessor callback reach the encoder before flushing it.
+          await new Promise((resolve) => window.setTimeout(resolve, 120));
+          if (!encoder || inputSamples === 0) throw new Error('動画に変換可能な音声が見つかりませんでした。');
+          const tail = encoder.flush();
+          if (tail.length > 0) mp3Chunks.push(new Uint8Array(tail));
+          setProgress(100);
+          return new File(mp3Chunks, mp3Name(file.name), { type: 'audio/mpeg' });
+        } catch (error) {
+          if (error && error.type === 'error' && video) throw new Error(readableMediaError(video));
+          throw error;
+        } finally {
+          cancelCurrentConversion = null;
+          cleanupMedia({ video, source, processor, silentGain, context, objectUrl });
+        }
+      }
 
-      // プレビューオーディオ要素の設定
-      convertedAudioPreview.src = convertedBlobUrl;
+      async function startConversion() {
+        if (!selectedFile || isConverting) return;
+        isConverting = true;
+        convertButton.disabled = true;
+        revokeConvertedUrl();
+        progressWrap.hidden = false;
+        setProgress(0);
 
-      // iPadの互換性を考慮したクリップボード風または直接ダウンロード
-      downloadBtn.onclick = () => {
-        // 元の動画ファイル名から拡張子を変更して保存名を決める
-        let baseName = 'extracted_audio';
-        if (selectedFile && selectedFile.name) {
-          baseName = selectedFile.name.substring(0, selectedFile.name.lastIndexOf('.')) || selectedFile.name;
+        try {
+          convertedFile = await convertUsingMediaElement(selectedFile);
+          convertedUrl = URL.createObjectURL(convertedFile);
+          setStatus(`変換が完了しました（${formatBytes(convertedFile.size)}）。「MP3を保存・共有」をタップしてください。`, 'success');
+          saveButton.classList.remove('hidden');
+        } catch (error) {
+          const cancelled = error && error.name === 'AbortError';
+          setStatus(cancelled ? '変換を中止しました。' : `変換できませんでした：${error.message || '不明なエラー'}`, 'error');
+          console.error('MP3 conversion failed:', error);
+        } finally {
+          isConverting = false;
+          convertButton.disabled = !selectedFile;
+        }
+      }
+
+      async function saveOrShare() {
+        if (!convertedFile || !convertedUrl) return;
+        // A direct user tap is required for the iPhone share sheet / file save flow.
+        try {
+          if (navigator.share && navigator.canShare && navigator.canShare({ files: [convertedFile] })) {
+            await navigator.share({ files: [convertedFile], title: convertedFile.name });
+            return;
+          }
+        } catch (error) {
+          if (error && error.name === 'AbortError') return; // Share sheet closed by the user.
         }
 
         const link = document.createElement('a');
-        link.href = convertedBlobUrl;
-        link.download = `${baseName}.mp3`;
+        link.href = convertedUrl;
+        link.download = convertedFile.name;
+        link.style.display = 'none';
         document.body.appendChild(link);
         link.click();
-        document.body.removeChild(link);
-      };
-    }
-
-    // プレビュー再生トグル
-    playConvertedBtn.addEventListener('click', () => {
-      if (convertedAudioPreview.classList.contains('hidden')) {
-        convertedAudioPreview.classList.remove('hidden');
-        convertedAudioPreview.play();
-        playConvertedBtn.innerHTML = '<i class="fa-solid fa-pause"></i> 一時停止';
-      } else {
-        if (convertedAudioPreview.paused) {
-          convertedAudioPreview.play();
-          playConvertedBtn.innerHTML = '<i class="fa-solid fa-pause"></i> 一時停止';
-        } else {
-          convertedAudioPreview.pause();
-          playConvertedBtn.innerHTML = '<i class="fa-solid fa-play"></i> 音声をプレビュー再生';
-        }
+        link.remove();
       }
-    });
 
-    // オーディオの一時停止などの同期
-    convertedAudioPreview.addEventListener('pause', () => {
-      playConvertedBtn.innerHTML = '<i class="fa-solid fa-play"></i> 音声をプレビュー再生';
-    });
-    convertedAudioPreview.addEventListener('play', () => {
-      playConvertedBtn.innerHTML = '<i class="fa-solid fa-pause"></i> 一時停止';
-    });
+      fileInput.addEventListener('change', () => resetForFile(fileInput.files && fileInput.files[0]));
+      convertButton.addEventListener('click', startConversion);
+      saveButton.addEventListener('click', saveOrShare);
+
+      // Desktop drag-and-drop is kept as a convenience without changing the iPhone flow.
+      ['dragenter', 'dragover'].forEach((eventName) => picker.addEventListener(eventName, (event) => {
+        event.preventDefault();
+        picker.classList.add('dragover');
+      }));
+      ['dragleave', 'drop'].forEach((eventName) => picker.addEventListener(eventName, (event) => {
+        event.preventDefault();
+        picker.classList.remove('dragover');
+      }));
+      picker.addEventListener('drop', (event) => {
+        const file = event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0];
+        if (file) resetForFile(file);
+      });
+      window.addEventListener('pagehide', () => {
+        if (isConverting && cancelCurrentConversion) cancelCurrentConversion();
+      });
+    })();
   </script>
 </body>
 </html>
