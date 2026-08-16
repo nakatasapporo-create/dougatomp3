@@ -116,8 +116,8 @@
 </head>
 <body>
   <main>
-    <h1>動画をMP3に変換</h1>
-    <p class="lead">動画を選ぶと、この端末内で音声をMP3に変換します。iPhoneでは、変換中はこの画面を開いたままにしてください。</p>
+    <h1>iPad、iPhoneで撮影、または、画面収録した動画をMP3に変換</h1>
+    <p class="lead">動画を選ぶと、この端末内で音声をMP3に変換します。iPad、iPhoneでは、変換中はこの画面を開いたままにしてください。</p>
 
     <label class="picker" id="picker">
       <input id="fileInput" type="file" accept="video/*,audio/*">
@@ -136,7 +136,7 @@
       <p class="status" id="status" aria-live="polite"></p>
     </div>
 
-    <p class="note">変換にはインターネット接続が必要です（MP3エンコーダーの読み込み用）。ファイル自体はサーバーへアップロードされません。iPhoneで再生できない形式の動画は変換できません。</p>
+    <p class="note">変換にはインターネット接続が必要です（MP3エンコーダーの読み込み用）。ファイル自体はサーバーへアップロードされません。iPad、iPhoneで再生できない形式の動画は変換できません。</p>
   </main>
 
   <script>
@@ -235,7 +235,7 @@
 
       function readableMediaError(video) {
         const code = video.error && video.error.code;
-        if (code === 4) return 'このiPhone Safariでは再生できない動画形式です。MP4（H.264/AAC）など、iPhoneで再生できる形式を使ってください。';
+        if (code === 4) return 'このiPad、iPhone Safariでは再生できない動画形式です。MP4（H.264/AAC）など、iPad、iPhoneで再生できる形式を使ってください。';
         if (code === 3) return '動画の音声をデコードできませんでした。別の動画形式でお試しください。';
         return '動画を読み込めませんでした。ファイルが壊れていないか確認してください。';
       }
@@ -339,7 +339,7 @@
             if (playbackError) throw playbackError;
           } catch (error) {
             if (error && error.type === 'error') throw new Error(readableMediaError(video));
-            throw new Error('iPhoneの音声再生を開始できませんでした。もう一度「MP3に変換」をタップしてください。');
+            throw new Error('iPad、iPhoneの音声再生を開始できませんでした。もう一度「MP3に変換」をタップしてください。');
           }
           await playbackEnded;
           if (cancelled) throw new DOMException('Cancelled', 'AbortError');
